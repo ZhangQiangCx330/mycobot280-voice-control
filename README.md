@@ -3,6 +3,13 @@
 基于阿里云语音识别（Paraformer）+ 通义千问（qwen）大模型的 myCobot 280 机械臂控制平台。
 后端用 MuJoCo 计算正运动学位姿，支持 **浏览器 Web 控制**、**键盘控制台**、**命令行语音控制** 三种使用方式。
 
+## 仿真截图
+
+<p align="center">
+  <img src="docs/images/simulation-1.jpg" width="48%" alt="myCobot 280 机械臂仿真 1">
+  <img src="docs/images/simulation-2.jpg" width="48%" alt="myCobot 280 机械臂仿真 2">
+</p>
+
 ## 启动
 
 ### 方式 1：Web 控制（浏览器）
