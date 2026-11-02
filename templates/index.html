@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>myCobot 280 Web 控制平台</title>
+    <style>
+        :root {
+            --bg: #14161a;
+            --surface: #1e2127;
+            --border: #2e333c;
+            --text: #e6e8ec;
+            --secondary: #9aa1ab;
+            --accent: #4d8df0;
+            --danger: #e05a5a;
+            --success: #4caf7d;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            flex-shrink: 0;
+        }
+        .topbar h1 { font-size: 15px; font-weight: 600; }
+        .topbar .status { font-size: 12px; color: var(--secondary); }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-right: 6px; }
+        .dot.online { background: var(--success); }
+        .main { flex: 1; display: flex; min-height: 0; }
+        #viewer { flex: 1; background: #0d0f12; cursor: grab; }
+        #viewer:active { cursor: grabbing; }
+        .panel {
+            width: 320px;
+            flex-shrink: 0;
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .panel-body { flex: 1; overflow-y: auto; padding: 14px; }
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--secondary);
+            margin: 13px 0 8px;
+        }
+        .section-label:first-child { margin-top: 0; }
+        .btn-row { display: flex; flex-wrap: wrap; gap: 7px; }
+        .btn {
+            padding: 8px 10px;
+            font-family: inherit;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+        }
+        .btn:hover { background: #262a31; border-color: #3a4049; }
+        .btn:active { background: #2e333c; }
+        .btn.danger { border-color: #5a3232; color: var(--danger); }
+        .btn.danger:hover { background: #2a1d1d; }
+        .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn.primary:hover { background: #3d7bdd; }
+        .btn-voice {
+            width: 100%;
+            padding: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+        .btn-voice.recording { background: var(--danger); border-color: var(--danger); color: #fff; }
+        .log-wrap { flex-shrink: 0; display: flex; flex-direction: column; }
+        .log-area {
+            flex: 1;
+            overflow-y: auto;
+            background: #0d0f12;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 11px;
+            line-height: 1.7;
+            color: var(--secondary);
+        }
+        .log-area .log-info { color: var(--accent); }
+        .log-area .log-error { color: var(--danger); }
+        .log-area .log-success { color: var(--success); }
+        .hint { font-size: 12px; color: var(--secondary); margin-top: 6px; }
+        .lamp-row { display: flex; align-items: center; gap: 12px; }
+        .lamp-indicator {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #4a4f57;
+            border: 2px solid #2e333c;
+            flex-shrink: 0;
+            transition: background 0.2s, box-shadow 0.2s;
+        }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "/static/js/three.module.js",
+            "three/addons/controls/OrbitControls.js": "/static/js/OrbitControls.js",
+            "three/addons/loaders/STLLoader.js": "/static/js/STLLoader.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div class="topbar">
+        <h1>myCobot 280 控制平台</h1>
+        <div class="status"><span id="dot" class="dot"></span><span id="statusText">连接中…</span></div>
+    </div>
+    <div class="main">
+        <div id="viewer"></div>
+        <div class="panel">
+            <div class="panel-body">
+                <div class="section-label">语音控制</div>
+                <button id="btnVoice" class="btn btn-voice">按住说话</button>
+                <div class="hint">按住录音，松开识别</div>
+
+                <div class="section-label">灯光状态</div>
+                <div class="lamp-row">
+                    <div id="rgbLamp" class="lamp-indicator"></div>
+                    <span id="rgbText" class="hint" style="margin-top:0;">关</span>
+                </div>
+
+                <div class="section-label">基础动作</div>
+                <div class="btn-row">
+                    <button class="btn primary" data-action="back_zero">归零</button>
+                    <button class="btn" data-action="relax_arms">放松</button>
+                    <button class="btn danger" data-action="stop">急停</button>
+                </div>
+
+                <div class="section-label">表演动作</div>
+                <div class="btn-row">
+                    <button class="btn" data-action="head_nod">点头</button>
+                    <button class="btn" data-action="head_shake">摇头</button>
+                    <button class="btn" data-action="head_dance">头部舞蹈</button>
+                </div>
+                <div class="btn-row" style="margin-top:7px;">
+                    <button class="btn" data-action="dance">跳舞</button>
+                    <button class="btn" data-action="dance_gripper">跳舞+夹爪</button>
+                    <button class="btn" data-action="breathing">呼吸灯</button>
+                </div>
+
+                <div class="section-label">抓取与灯光</div>
+                <div class="btn-row">
+                    <button class="btn" data-action="pick_place">抓取放置</button>
+                    <button class="btn" data-action="gripper_test">夹爪测试</button>
+                </div>
+                <div class="btn-row" style="margin-top:7px;">
+                    <button class="btn" data-action="rgb_light">RGB灯光</button>
+                    <button class="btn" data-action="light_off">关灯</button>
+                    <button class="btn" data-action="draw_square">画正方形</button>
+                </div>
+
+                <div class="section-label">轨迹录制</div>
+                <div class="btn-row">
+                    <button class="btn" data-action="record_start">开始录制</button>
+                    <button class="btn" data-action="record_stop">停止录制</button>
+                    <button class="btn" data-action="replay">回放</button>
+                </div>
+                <div class="btn-row" style="margin-top:7px;">
+                    <button class="btn" data-action="save">保存</button>
+                    <button class="btn" data-action="load">加载</button>
+                </div>
+            </div>
+            <div class="log-wrap" style="height: 252px; padding: 0 12px 8px;">
+                <div class="log-area" id="logArea"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+
+        // ==================== 3D 场景 ====================
+        const container = document.getElementById('viewer');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0d0f12);
+
+        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
+        camera.position.set(0.6, 0.4, 0.7);
+        camera.lookAt(0, 0.2, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0.2, 0);
+        controls.enableDamping = true;
+        controls.update();
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(1, 1, 1);
+        scene.add(dirLight);
+        const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight2.position.set(-1, 0.5, -1);
+        scene.add(dirLight2);
+
+        const grid = new THREE.GridHelper(2, 20, 0x3a4049, 0x23262c);
+        scene.add(grid);
+
+        // ==================== 加载 STL 模型 ====================
+        const meshNames = ['joint1_jet', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6', 'joint7'];
+        const whiteColor = 0xe8e8e8;
+        const meshes = {};
+        const stlLoader = new STLLoader();
+        let latestLinks = null;
+
+        function loadMeshes() {
+            meshNames.forEach((name) => {
+                stlLoader.load(`/processed/${name}.stl`, (geometry) => {
+                    const material = new THREE.MeshStandardMaterial({
+                        color: whiteColor,
+                        metalness: 0.3,
+                        roughness: 0.6,
+                    });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    scene.add(mesh);
+                    meshes[name] = {
+                        mesh,
+                        targetPos: new THREE.Vector3(),
+                        targetQuat: new THREE.Quaternion(),
+                    };
+                    applyLinkToMesh(name);
+                });
+            });
+        }
+        loadMeshes();
+
+        function applyPose(links) {
+            latestLinks = links;
+            links.forEach(link => {
+                const m = meshes[link.mesh];
+                if (!m) return;
+                m.targetPos.set(link.pos[0], link.pos[1], link.pos[2]);
+                m.targetQuat.set(link.quat[1], link.quat[2], link.quat[3], link.quat[0]);
+            });
+        }
+
+        function applyLinkToMesh(name) {
+            if (!latestLinks) return;
+            const link = latestLinks.find(l => l.mesh === name);
+            if (!link) return;
+            const m = meshes[name];
+            if (!m) return;
+            m.targetPos.set(link.pos[0], link.pos[1], link.pos[2]);
+            m.targetQuat.set(link.quat[1], link.quat[2], link.quat[3], link.quat[0]);
+            m.mesh.position.copy(m.targetPos);
+            m.mesh.quaternion.copy(m.targetQuat);
+        }
+
+        function applyColor(r, g, b) {
+            const lamp = document.getElementById('rgbLamp');
+            const text = document.getElementById('rgbText');
+            if (r === 0 && g === 0 && b === 0) {
+                lamp.style.background = '#4a4f57';
+                lamp.style.boxShadow = 'none';
+                text.textContent = '关';
+            } else {
+                lamp.style.background = `rgb(${r},${g},${b})`;
+                lamp.style.boxShadow = `0 0 16px 4px rgb(${r},${g},${b})`;
+                text.textContent = `RGB(${r},${g},${b})`;
+            }
+        }
+
+        // ==================== 动画循环 ====================
+        window.__getMeshPositions = () => {
+            const out = {};
+            for (const name in meshes) {
+                out[name] = meshes[name].mesh.position.toArray().map(v => Math.round(v * 1000) / 1000);
+            }
+            return out;
+        };
+
+        function animate() {
+            requestAnimationFrame(animate);
+            for (const name in meshes) {
+                const m = meshes[name];
+                m.mesh.position.lerp(m.targetPos, 0.2);
+                m.mesh.quaternion.slerp(m.targetQuat, 0.2);
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // ==================== 日志 ====================
+        const logArea = document.getElementById('logArea');
+        function log(msg, cls = '') {
+            const div = document.createElement('div');
+            div.className = cls;
+            div.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+            logArea.appendChild(div);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        // ==================== 控制 WebSocket ====================
+        const dot = document.getElementById('dot');
+        const statusText = document.getElementById('statusText');
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(protocol + '//' + location.host + '/ws');
+
+        ws.onopen = () => {
+            dot.classList.add('online');
+            statusText.textContent = '已连接';
+            log('控制通道已连接', 'log-success');
+        };
+        ws.onmessage = (e) => {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'pose') {
+                applyPose(msg.links);
+            } else if (msg.type === 'log') {
+                log(msg.message, 'log-info');
+            } else if (msg.type === 'color') {
+                applyColor(msg.r, msg.g, msg.b);
+            }
+        };
+        ws.onclose = () => {
+            dot.classList.remove('online');
+            statusText.textContent = '已断开';
+            log('控制通道断开', 'log-error');
+        };
+
+        function sendCmd(action, params = {}) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action, params }));
+            } else {
+                log('未连接服务器', 'log-error');
+            }
+        }
+
+        document.querySelectorAll('.btn[data-action]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                sendCmd(btn.dataset.action);
+                log('发送指令: ' + btn.dataset.action, 'log-info');
+            });
+        });
+
+        // ==================== 语音录音 ====================
+        const btnVoice = document.getElementById('btnVoice');
+        let wsAudio = null;
+        let audioCtx = null;
+        let processor = null;
+        let micStream = null;
+        let audioClosing = false;
+
+        function connectAudio() {
+            wsAudio = new WebSocket(protocol + '//' + location.host + '/ws_audio');
+            wsAudio.onopen = () => log('音频通道已连接', 'log-success');
+            wsAudio.onclose = () => {
+                if (audioClosing) {
+                    log('音频通道已关闭', '');
+                } else {
+                    log('音频通道断开', 'log-error');
+                }
+                audioClosing = false;
+            };
+            wsAudio.onerror = () => {};
+        }
+
+        function downsample(buf, fromRate, toRate) {
+            const ratio = fromRate / toRate;
+            const newLen = Math.round(buf.length / ratio);
+            const result = new Float32Array(newLen);
+            for (let i = 0; i < newLen; i++) {
+                result[i] = buf[Math.floor(i * ratio)];
+            }
+            return result;
+        }
+
+        function floatTo16bitPCM(input) {
+            const output = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+                const s = Math.max(-1, Math.min(1, input[i]));
+                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return output;
+        }
+
+        function bufferToBase64(buf) {
+            const bytes = new Uint8Array(buf.buffer);
+            let binary = '';
+            const chunk = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunk) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+            }
+            return btoa(binary);
+        }
+
+        async function startRecording() {
+            if (wsAudio === null || wsAudio.readyState !== WebSocket.OPEN) {
+                connectAudio();
+                await new Promise(res => { wsAudio.onopen = res; });
+            }
+            micStream = await navigator.mediaDevices.getUserMedia({
+                audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true }
+            });
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioCtx.createMediaStreamSource(micStream);
+            processor = audioCtx.createScriptProcessor(4096, 1, 1);
+            source.connect(processor);
+            processor.connect(audioCtx.destination);
+            processor.onaudioprocess = (e) => {
+                const input = e.inputBuffer.getChannelData(0);
+                const ds = downsample(input, audioCtx.sampleRate, 16000);
+                const pcm = floatTo16bitPCM(ds);
+                if (wsAudio && wsAudio.readyState === WebSocket.OPEN) {
+                    wsAudio.send(JSON.stringify({ type: 'audio', data: bufferToBase64(pcm) }));
+                }
+            };
+            btnVoice.classList.add('recording');
+            btnVoice.textContent = '松开识别';
+            log('开始录音…', 'log-info');
+        }
+
+        function stopRecording() {
+            if (processor) { processor.disconnect(); processor = null; }
+            if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+            if (audioCtx) { audioCtx.close(); audioCtx = null; }
+            if (wsAudio && wsAudio.readyState === WebSocket.OPEN) {
+                audioClosing = true;
+                wsAudio.send(JSON.stringify({ type: 'stop' }));
+            }
+            btnVoice.classList.remove('recording');
+            btnVoice.textContent = '按住说话';
+            log('停止录音，识别中…', 'log-info');
+        }
+
+        btnVoice.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startRecording().catch(err => log('录音失败: ' + err.message, 'log-error'));
+        });
+        btnVoice.addEventListener('mouseup', () => stopRecording());
+        btnVoice.addEventListener('mouseleave', () => { if (micStream) stopRecording(); });
+        btnVoice.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startRecording().catch(err => log('录音失败: ' + err.message, 'log-error'));
+        });
+        btnVoice.addEventListener('touchend', () => stopRecording());
+
+        log('myCobot 280 Web 平台就绪', 'log-success');
+    </script>
+</body>
+</html>
